@@ -1,0 +1,53 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from encoder import get_encoder
+from augmentation import get_augmenter
+
+# Augmentation config
+classification_augmentation = {"min_area": 0.8}
+
+# Load 2D slices and labels
+train_images = np.load("D:/CSUSM-Computer Science/DL/Deep Learning/starter_code/starter_code/Brain_Tumor_Data/train_slices.npy").astype(np.float32)
+train_labels = np.load("D:/CSUSM-Computer Science/DL/Deep Learning/starter_code/starter_code/Brain_Tumor_Data/train_labels_2d.npy").astype(np.int32)
+test_images = np.load("D:/CSUSM-Computer Science/DL/Deep Learning/starter_code/starter_code/Brain_Tumor_Data/test_slices.npy").astype(np.float32)
+test_labels = np.load("D:/CSUSM-Computer Science/DL/Deep Learning/starter_code/starter_code/Brain_Tumor_Data/test_labels_2d.npy").astype(np.int32)
+
+# Add grayscale channel
+train_images = np.expand_dims(train_images, axis=-1)
+test_images = np.expand_dims(test_images, axis=-1)
+
+# Prepare tf.data datasets
+batch_size = 64
+train_dataset = tf.data.Dataset.from_tensor_slices((train_images, train_labels))
+train_dataset = train_dataset.shuffle(1000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+test_dataset = tf.data.Dataset.from_tensor_slices((test_images, test_labels))
+test_dataset = test_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+# Build baseline model: supervised classifier for HGG vs LGG
+baseline_model = keras.Sequential([
+    get_augmenter(**classification_augmentation),
+    get_encoder(width=128),
+    layers.Dense(2),  # 2 output units for 2 classes (HGG, LGG)
+], name="baseline_model")
+
+# Compile model
+baseline_model.compile(
+    optimizer=keras.optimizers.Adam(),
+    loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+    metrics=[keras.metrics.SparseCategoricalAccuracy(name="acc")],
+)
+
+# Train model
+baseline_history = baseline_model.fit(
+    train_dataset,
+    epochs=50,
+    validation_data=test_dataset
+)
+
+# Report best validation accuracy
+print("Max validation accuracy: {:.2f}%".format(
+    max(baseline_history.history["val_acc"]) * 100
+))
